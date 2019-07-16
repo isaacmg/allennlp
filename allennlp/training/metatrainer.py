@@ -36,9 +36,10 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,
+                 #meta_model: unsure of type for now ,
                  optimizer: torch.optim.Optimizer,
                  iterator: DataIterator,
-                 train_dataset: Iterable[Instance],
+                 train_datasets: List[Iterable[Instance]],
                  validation_dataset: Optional[Iterable[Instance]] = None,
                  patience: Optional[int] = None,
                  validation_metric: str = "-loss",
@@ -273,6 +274,7 @@ class MetaTrainer(Trainer):
 
     def rescale_gradients(self) -> Optional[float]:
         return training_util.rescale_gradients(self.model, self._grad_norm)
+        
     # TODO check out overriding 
     def batch_loss(self, batch_group: List[TensorDict], for_training: bool) -> torch.Tensor:
         """
