@@ -36,11 +36,11 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,
-                 #meta_model: unsure of type for now ,
+                 #meta_model: unsure of type for now,
                  optimizer: torch.optim.Optimizer,
                  iterator: DataIterator,
                  train_datasets: List[Iterable[Instance]],
-                 validation_dataset: Optional[Iterable[Instance]] = None,
+                 validation_datasets: Optional[Iterable[Instance]] = None,
                  patience: Optional[int] = None,
                  validation_metric: str = "-loss",
                  validation_iterator: DataIterator = None,
@@ -200,7 +200,13 @@ class MetaTrainer(Trainer):
                  should_log_parameter_statistics: bool = True,
                  should_log_learning_rate: bool = False,
                  log_batch_size_period: Optional[int] = None,
-                 moving_average: Optional[MovingAverage] = None)
+                 moving_average: Optional[MovingAverage] = None,
+                 tasks_per_batch: int = 2,
+                 total_iters: int = 1000
+                 
+                
+                
+                 )
 
         # I am not calling move_to_gpu here, because if the model is
         # not already on the GPU then the optimizer is going to be wrong.
@@ -210,7 +216,7 @@ class MetaTrainer(Trainer):
         self._validation_iterator = validation_iterator
         self.shuffle = shuffle
         self.optimizer = optimizer
-        self.train_data = train_dataset
+        self.train_data = train_datasets
         self._validation_data = validation_dataset
 
         if patience is None:  # no early stopping
@@ -274,7 +280,7 @@ class MetaTrainer(Trainer):
 
     def rescale_gradients(self) -> Optional[float]:
         return training_util.rescale_gradients(self.model, self._grad_norm)
-        
+
     # TODO check out overriding 
     def batch_loss(self, batch_group: List[TensorDict], for_training: bool) -> torch.Tensor:
         """
@@ -320,7 +326,8 @@ class MetaTrainer(Trainer):
         num_gpus = len(self._cuda_devices)
 
         # Get tqdm for the training batches
-        raw_train_generator = self.iterator(self.train_data,
+        for i in range(0, self.tasks_per_batch):
+            raw_train_generator = self.iterator(self.train_data,
                                             num_epochs=1,
                                             shuffle=self.shuffle)
         train_generator = lazy_groups_of(raw_train_generator, num_gpus)
@@ -423,7 +430,7 @@ class MetaTrainer(Trainer):
         for (gpu_num, memory) in gpu_usage:
             metrics['gpu_'+str(gpu_num)+'_memory_MB'] = memory
         return metrics
-    #todo second loss
+
     def _validation_loss(self) -> Tuple[float, int]:
         """
         Computes the validation loss. Returns it and the number of batches.
