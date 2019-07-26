@@ -326,10 +326,12 @@ class MetaTrainer(Trainer):
         num_gpus = len(self._cuda_devices)
 
         # Get tqdm for the training batches
+        # TODO combine the data iterators
         for i in range(0, self.tasks_per_batch):
             raw_train_generator = self.iterator(self.train_data,
                                             num_epochs=1,
                                             shuffle=self.shuffle)
+
         train_generator = lazy_groups_of(raw_train_generator, num_gpus)
         num_training_batches = math.ceil(self.iterator.get_num_batches(self.train_data)/num_gpus)
         self._last_log = time.time()
@@ -346,6 +348,7 @@ class MetaTrainer(Trainer):
         train_generator_tqdm = Tqdm.tqdm(train_generator,
                                          total=num_training_batches)
         cumulative_batch_size = 0
+        # TODO replace inner 
         for batch_group in train_generator_tqdm:
             batches_this_epoch += 1
             self._batch_num_total += 1
