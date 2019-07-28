@@ -61,7 +61,12 @@ class MetaTrainer(Trainer):
                  should_log_parameter_statistics: bool = True,
                  should_log_learning_rate: bool = False,
                  log_batch_size_period: Optional[int] = None,
-                 moving_average: Optional[MovingAverage] = None) -> None:
+                 moving_average: Optional[MovingAverage] = None,
+                 # meta learner params 
+                 meta_batches: int = 200,
+                 inner_steps: int = 3,
+                 tasks_per_batch: int = 2 ) -> None:
+                
         """
         A trainer for doing supervised learning. It just takes a labeled dataset
         and a ``DataIterator``, and uses the supplied ``Optimizer`` to learn the weights
@@ -201,8 +206,7 @@ class MetaTrainer(Trainer):
                  should_log_learning_rate: bool = False,
                  log_batch_size_period: Optional[int] = None,
                  moving_average: Optional[MovingAverage] = None,
-                 tasks_per_batch: int = 2,
-                 total_iters: int = 1000
+
                  
                 
                 
@@ -218,6 +222,9 @@ class MetaTrainer(Trainer):
         self.optimizer = optimizer
         self.train_data = train_datasets
         self._validation_data = validation_dataset
+        # Meta Trainer specific params 
+        self.meta_batches = meta_batches
+        self.tasks_per_batch = tasks_per_batch
 
         if patience is None:  # no early stopping
             if validation_dataset:
@@ -261,6 +268,7 @@ class MetaTrainer(Trainer):
         # is used inside a closure for the hook which logs activations in
         # ``_enable_activation_logging``.
         self._batch_num_total = 0
+        
 
         self._tensorboard = TensorboardWriter(
                 get_batch_num_total=lambda: self._batch_num_total,
@@ -334,6 +342,7 @@ class MetaTrainer(Trainer):
                                             num_epochs=1,
                                             shuffle=self.shuffle)
             train_generators.append(lazy_groups_of(raw_train_generator, num_gpus))
+        
         # fix max number of batches 
         num_training_batches = math.ceil(self.iterator.get_num_batches(self.train_data)/num_gpus)
         self._last_log = time.time()
@@ -350,8 +359,15 @@ class MetaTrainer(Trainer):
         train_generator_tqdm = Tqdm.tqdm(train_generator,
                                          total=num_training_batches)
         cumulative_batch_size = 0
-        # TODO replace inner 
-        for batch_group in train_generator_tqdm:
+        # TODO replace inner batch size 
+        for i in range(0, self.meta_batches):
+            # inner batches 
+            random.shuffle(train_generators)
+            tasks = train_generators[0:self.numb]
+            for in range(0, self.inner_step):
+
+                pass 
+
             batches_this_epoch += 1
             self._batch_num_total += 1
             batch_num_total = self._batch_num_total
