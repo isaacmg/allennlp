@@ -326,14 +326,15 @@ class MetaTrainer(Trainer):
         num_gpus = len(self._cuda_devices)
 
         # Get tqdm for the training batches
-        # TODO combine datasets to one  data iterator
+        # TODO combine datasets to one data iterator
         raw_generators = []
-        for i in range(0, self.tasks_per_batch):
-            raw_train_generators.append(self.iterator(self.train_data[0],
+        train_generators = []
+        for i, trainer in enumerate(self.train_data):
+            raw_train_generators = self.iterator(trainer,
                                             num_epochs=1,
-                                            shuffle=self.shuffle))
-            train_generators = lazy_groups_of(raw_train_generator, num_gpus)
-
+                                            shuffle=self.shuffle)
+            train_generators.append(lazy_groups_of(raw_train_generator, num_gpus))
+        # fix max number of batches 
         num_training_batches = math.ceil(self.iterator.get_num_batches(self.train_data)/num_gpus)
         self._last_log = time.time()
         last_save_time = time.time()
