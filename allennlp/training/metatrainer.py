@@ -317,7 +317,8 @@ class MetaTrainer(Trainer):
 
     def _train_epoch(self, epoch: int) -> Dict[str, float]:
         """
-        Trains one epoch and returns metrics.
+        Trains on one epoch. Differs from base trainer in that 
+        it utilizes
         """
         logger.info("Epoch %d/%d", epoch, self._num_epochs - 1)
         peak_cpu_usage = peak_memory_mb()
@@ -338,7 +339,7 @@ class MetaTrainer(Trainer):
         raw_generators = []
         train_generators = []
         for i, trainer in enumerate(self.train_data):
-            raw_train_generators = self.iterator(trainer,
+            raw_train_generator = self.iterator(trainer,
                                             num_epochs=1,
                                             shuffle=self.shuffle)
             train_generators.append(lazy_groups_of(raw_train_generator, num_gpus))
@@ -356,17 +357,18 @@ class MetaTrainer(Trainer):
 
 
         logger.info("Training")
-        train_generator_tqdm = Tqdm.tqdm(train_generator,
-                                         total=num_training_batches)
+        #train_generator_tqdm = Tqdm.tqdm(train_generator,
+                                       #  total=num_training_batches)
         cumulative_batch_size = 0
         # TODO replace inner batch size 
         for i in range(0, self.meta_batches):
             # inner batches 
             random.shuffle(train_generators)
-            tasks = train_generators[0:self.numb]
-            for in range(0, self.inner_step):
+            tasks = train_generators[0:self.tasks_per_batch]
 
+            for in range(0, self.inner_steps):
                 pass 
+                
 
             batches_this_epoch += 1
             self._batch_num_total += 1
