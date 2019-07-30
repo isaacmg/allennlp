@@ -13,43 +13,6 @@ from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-class _LazyInstances(Iterable):
-    """
-    An ``Iterable`` that just wraps a thunk for generating instances and calls it for
-    each call to ``__iter__``.
-    """
-    def __init__(self,
-                 instance_generator: Callable[[], Iterable[Instance]],
-                 cache_file: str = None,
-                 deserialize: Callable[[str], Instance] = None,
-                 serialize: Callable[[Instance], str] = None) -> None:
-        super().__init__()
-        self.instance_generator = instance_generator
-        self.cache_file = cache_file
-        self.deserialize = deserialize
-        self.serialize = serialize
-
-    def __iter__(self) -> Iterator[Instance]:
-        # Case 1: Use cached instances
-        if self.cache_file is not None and os.path.exists(self.cache_file):
-            with open(self.cache_file) as data_file:
-                for line in data_file:
-                    yield self.deserialize(line)
-        # Case 2: Need to cache instances
-        elif self.cache_file is not None:
-            with open(self.cache_file, 'w') as data_file:
-                for instance in self.instance_generator():
-                    data_file.write(self.serialize(instance))
-                    data_file.write("\n")
-                    yield instance
-        # Case 3: No cache
-        else:
-            instances = self.instance_generator()
-            if isinstance(instances, list):
-                raise ConfigurationError("For a lazy dataset reader, _read() must return a generator")
-            yield from instances
-
-
 class DatasetReader(DatasetReader):
     """
     A ``DatasetReader`` knows how to turn a file containing a dataset into a collection
