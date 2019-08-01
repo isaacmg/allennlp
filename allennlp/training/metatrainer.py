@@ -225,6 +225,7 @@ class MetaTrainer(Trainer):
         # Meta Trainer specific params 
         self.meta_batches = meta_batches
         self.tasks_per_batch = tasks_per_batch
+        self.inner_steps = inner_steps
 
         if patience is None:  # no early stopping
             if validation_dataset:
@@ -357,17 +358,19 @@ class MetaTrainer(Trainer):
 
 
         logger.info("Training")
-        #train_generator_tqdm = Tqdm.tqdm(train_generator,
-                                       #  total=num_training_batches)
+        
         cumulative_batch_size = 0
         # TODO replace inner batch size 
         for i in range(0, self.meta_batches):
             # inner batches 
             random.shuffle(train_generators)
-            tasks = train_generators[0:self.tasks_per_batch]
+            # Only support one task type per batch at the moment
+            task = train_generators[0]
+            task_wrap = Tqdm.tqdm(task, self.inner_steps)
+            for batch_data in task_wrap:
+                self.inner_update(batch_data)
 
-            for in range(0, self.inner_steps):
-                pass 
+
                 
 
             batches_this_epoch += 1
