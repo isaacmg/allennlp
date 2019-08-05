@@ -6,10 +6,8 @@ import time
 import datetime
 import traceback
 from typing import Dict, Optional, List, Tuple, Union, Iterable, Any
-
 import torch
 import torch.optim.lr_scheduler
-
 from allennlp.common import Params
 from allennlp.common.checks import ConfigurationError, parse_cuda_device
 from allennlp.common.util import (dump_metrics, gpu_memory_mb, peak_memory_mb,
@@ -28,7 +26,7 @@ from allennlp.training.tensorboard_writer import TensorboardWriter
 from allennlp.training.trainer_base import TrainerBase
 from allennlp.training import util as training_util
 from allennlp.training.moving_average import MovingAverage
-
+from copy import deepcopy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
@@ -315,6 +313,22 @@ class MetaTrainer(Trainer):
             loss = None
 
         return loss
+    def reptile_inner_update(self, train_generators):
+        weights_before = deepcopy(self.model.state_dict())
+        self.optimizer.zero_grad()
+        random.shuffle(train_generators)
+        task = train_generators[1]
+        task_wrap = Tqdm.tqdm(task, self.inner_steps)
+            for batch_data in task_wrap:
+                loss = self.batch_loss(batch_data)
+                loss.backward()
+                for param in model.parameters():
+                    #TODO add innerstepsize
+                     param.data -= innerstepsize * param.grad.data
+
+        
+    def reptile_outer():
+        pass 
 
     def _train_epoch(self, epoch: int) -> Dict[str, float]:
         """
@@ -365,19 +379,15 @@ class MetaTrainer(Trainer):
             # inner batches 
             random.shuffle(train_generators)
             # Only support one task type per batch at the moment
+            # Do REPTILE for now. Add advanced functionality later 
+            # def inner_updates(self, etc)
             task = train_generators[0]
             task_wrap = Tqdm.tqdm(task, self.inner_steps)
             for batch_data in task_wrap:
-                self.inner_update(batch_data)
-
-
-                
-
+                loss = self.batch_loss(batch_data)
             batches_this_epoch += 1
             self._batch_num_total += 1
             batch_num_total = self._batch_num_total
-
-            self.optimizer.zero_grad()
 
             loss = self.batch_loss(batch_group, for_training=True)
 
