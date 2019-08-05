@@ -8,6 +8,7 @@ import traceback
 from typing import Dict, Optional, List, Tuple, Union, Iterable, Any
 import torch
 import torch.optim.lr_scheduler
+import random
 from allennlp.common import Params
 from allennlp.common.checks import ConfigurationError, parse_cuda_device
 from allennlp.common.util import (dump_metrics, gpu_memory_mb, peak_memory_mb,
@@ -175,35 +176,6 @@ class MetaTrainer(Trainer):
             parameters. This is necessary because we want the saved model to perform as well as the validated
             model if we load it later. But this may cause problems if you restart the training from checkpoint.
         """
-        
-        super().__init__(
-                 model,
-                 optimizer,
-                 iterator,
-                 train_dataset:,
-                 validation_dataset,
-                 patience,
-                 validation_metric,
-                 validation_iterator,
-                 shuffle,
-                 num_epochs,
-                 serialization_dir: Optional[str] = None,
-                 num_serialized_models_to_keep: int = 20,
-                 keep_serialized_model_every_num_seconds: int = None,
-                 checkpointer: Checkpointer = None,
-                 model_save_interval: float = None,
-                 cuda_device: Union[int, List] = -1,
-                 grad_norm: Optional[float] = None,
-                 grad_clipping: Optional[float] = None,
-                 learning_rate_scheduler: Optional[LearningRateScheduler] = None,
-                 momentum_scheduler: Optional[MomentumScheduler] = None,
-                 summary_interval: int = 100,
-                 histogram_interval: int = None,
-                 should_log_parameter_statistics: bool = True,
-                 should_log_learning_rate: bool = False,
-                 log_batch_size_period: Optional[int] = None,
-                 moving_average: Optional[MovingAverage] = None
-                 )
 
         # I am not calling move_to_gpu here, because if the model is
         # not already on the GPU then the optimizer is going to be wrong.
@@ -310,29 +282,31 @@ class MetaTrainer(Trainer):
 
         return loss
 
-    def reptile_inner_update(self, train_generators, iteration):
+    def reptile_inner_update(self, train_generators: List[Iterable], iteration: int):
         # https://github.com/farbodtm/reptile-pytorch/blob/master/reptile.py
         weights_before = deepcopy(self.model.state_dict())
         self.optimizer.zero_grad()
         random.shuffle(train_generators)
-        task = train_generators[1]
+        task = train_generators[0]
         task_wrap = Tqdm.tqdm(task, self.inner_steps)
-            for batch_data in task_wrap:
-                loss = self.batch_loss(batch_data)
-                 if torch.isnan(loss):
-                    raise ValueError("nan loss encountered")
-                loss.backward()
-                self.optimizer.step()
-                # This only place where vary from implementation 
-                ##for param in model.parameters():
-                    #TODO add innerstepsize
-                     ##param.data -= innerstepsize * param.grad.data
+        total_loss = 0.0
+        for batch_data in task_wrap:
+            loss = self.batch_loss(batch_data, True)
+            if torch.isnan(loss):
+                raise ValueError("nan loss encountered")
+            loss.backward()
+            total_loss += loss.item()
+            self.optimizer.step()
+            # This only place where vary from implementation 
+            ##for param in model.parameters():
+                #TODO add innerstepsize
+                    ##param.data -= innerstepsize * param.grad.data
         weights_after = self.model.state_dict()
         #They used self.step_size of 1.0 in some of their outer.
         outerstepsize = self.step_size * (1 - iteration / self.meta_batches) # linear schedule
-        self.model.load_state_dict({name : 
-        weights_before[name] + (weights_after[name] - weights_before[name]) * outerstepsize 
+        self.model.load_state_dict({name : weights_before[name] + (weights_after[name] - weights_before[name]) * outerstepsize
         for name in weights_before})
+        return total_loss
         
 
     def _train_epoch(self, epoch: int) -> Dict[str, float]:
@@ -378,20 +352,21 @@ class MetaTrainer(Trainer):
         cumulative_batch_size = 0
         # TODO replace inner batch size 
         for i in range(0, self.meta_batches):
-            self.reptile_inner_update(train_generators, i)
+            loss_batch = self.reptile_inner_update(train_generators, i)
             self.reptile_outer_update()
 
             # TODO figure out if is important 
-            train_loss += loss.item()
+            train_loss += loss_batch
             # TODO figure out BATCH NORM MAML https://openreview.net/pdf?id=HygBZnRctX
             #batch_grad_norm = self.rescale_gradients()
 
             # This does nothing if batch_num_total is None or you are using a
             # scheduler which doesn't update per batch.
-            if self._learning_rate_scheduler:
-                self._learning_rate_scheduler.step_batch(batch_num_total)
-            if self._momentum_scheduler:
-                self._momentum_scheduler.step_batch(batch_num_total)
+            # TODO investigate learning rate scheduling for meta learning 
+            #if self._learning_rate_scheduler:
+                #self._learning_rate_scheduler.step_batch(batch_num_total)
+            #if self._momentum_scheduler:
+                #self._momentum_scheduler.step_batch(batch_num_total)
 
             if self._tensorboard.should_log_histograms_this_batch():
                 # get the magnitude of parameter updates for logging
@@ -416,8 +391,6 @@ class MetaTrainer(Trainer):
             # Update the description with the latest metrics
             metrics = training_util.get_metrics(self.model, train_loss, batches_this_epoch)
             description = training_util.description_from_metrics(metrics)
-
-            train_generator_tqdm.set_description(description, refresh=False)
 
             # Log parameter values to Tensorboard
             if self._tensorboard.should_log_this_batch():
