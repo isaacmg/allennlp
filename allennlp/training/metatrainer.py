@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,
-                 #meta_model: unsure of type for now,
                  optimizer: torch.optim.Optimizer,
                  iterator: DataIterator,
                  train_datasets: List[Iterable[Instance]],
@@ -177,17 +176,17 @@ class MetaTrainer(Trainer):
             model if we load it later. But this may cause problems if you restart the training from checkpoint.
         """
         
-        super().__init__(self,
-                 model: Model,
-                 optimizer: torch.optim.Optimizer,
-                 iterator: DataIterator,
-                 train_dataset: Iterable[Instance],
-                 validation_dataset: Optional[Iterable[Instance]] = None,
-                 patience: Optional[int] = None,
-                 validation_metric: str = "-loss",
-                 validation_iterator: DataIterator = None,
-                 shuffle: bool = True,
-                 num_epochs: int = 20,
+        super().__init__(
+                 model,
+                 optimizer,
+                 iterator,
+                 train_dataset:,
+                 validation_dataset,
+                 patience,
+                 validation_metric,
+                 validation_iterator,
+                 shuffle,
+                 num_epochs,
                  serialization_dir: Optional[str] = None,
                  num_serialized_models_to_keep: int = 20,
                  keep_serialized_model_every_num_seconds: int = None,
@@ -203,11 +202,7 @@ class MetaTrainer(Trainer):
                  should_log_parameter_statistics: bool = True,
                  should_log_learning_rate: bool = False,
                  log_batch_size_period: Optional[int] = None,
-                 moving_average: Optional[MovingAverage] = None,
-
-                 
-                
-                
+                 moving_average: Optional[MovingAverage] = None
                  )
 
         # I am not calling move_to_gpu here, because if the model is
@@ -224,6 +219,7 @@ class MetaTrainer(Trainer):
         self.meta_batches = meta_batches
         self.tasks_per_batch = tasks_per_batch
         self.inner_steps = inner_steps
+        self.step_size = .01
 
         if patience is None:  # no early stopping
             if validation_dataset:
@@ -313,7 +309,9 @@ class MetaTrainer(Trainer):
             loss = None
 
         return loss
-    def reptile_inner_update(self, train_generators):
+
+    def reptile_inner_update(self, train_generators, iteration):
+        # https://github.com/farbodtm/reptile-pytorch/blob/master/reptile.py
         weights_before = deepcopy(self.model.state_dict())
         self.optimizer.zero_grad()
         random.shuffle(train_generators)
@@ -321,14 +319,21 @@ class MetaTrainer(Trainer):
         task_wrap = Tqdm.tqdm(task, self.inner_steps)
             for batch_data in task_wrap:
                 loss = self.batch_loss(batch_data)
+                 if torch.isnan(loss):
+                    raise ValueError("nan loss encountered")
                 loss.backward()
-                for param in model.parameters():
+                self.optimizer.step()
+                # This only place where vary from implementation 
+                ##for param in model.parameters():
                     #TODO add innerstepsize
-                     param.data -= innerstepsize * param.grad.data
-
+                     ##param.data -= innerstepsize * param.grad.data
+        weights_after = self.model.state_dict()
+        #They used self.step_size of 1.0 in some of their outer.
+        outerstepsize = self.step_size * (1 - iteration / self.meta_batches) # linear schedule
+        self.model.load_state_dict({name : 
+        weights_before[name] + (weights_after[name] - weights_before[name]) * outerstepsize 
+        for name in weights_before})
         
-    def reptile_outer():
-        pass 
 
     def _train_epoch(self, epoch: int) -> Dict[str, float]:
         """
@@ -348,9 +353,6 @@ class MetaTrainer(Trainer):
         self.model.train()
 
         num_gpus = len(self._cuda_devices)
-
-        # Get tqdm for the training batches
-        # TODO combine datasets to one data iterator
         raw_generators = []
         train_generators = []
         for i, trainer in enumerate(self.train_data):
@@ -376,29 +378,13 @@ class MetaTrainer(Trainer):
         cumulative_batch_size = 0
         # TODO replace inner batch size 
         for i in range(0, self.meta_batches):
-            # inner batches 
-            random.shuffle(train_generators)
-            # Only support one task type per batch at the moment
-            # Do REPTILE for now. Add advanced functionality later 
-            # def inner_updates(self, etc)
-            task = train_generators[0]
-            task_wrap = Tqdm.tqdm(task, self.inner_steps)
-            for batch_data in task_wrap:
-                loss = self.batch_loss(batch_data)
-            batches_this_epoch += 1
-            self._batch_num_total += 1
-            batch_num_total = self._batch_num_total
+            self.reptile_inner_update(train_generators, i)
+            self.reptile_outer_update()
 
-            loss = self.batch_loss(batch_group, for_training=True)
-
-            if torch.isnan(loss):
-                raise ValueError("nan loss encountered")
-
-            loss.backward()
-
+            # TODO figure out if is important 
             train_loss += loss.item()
-
-            batch_grad_norm = self.rescale_gradients()
+            # TODO figure out BATCH NORM MAML https://openreview.net/pdf?id=HygBZnRctX
+            #batch_grad_norm = self.rescale_gradients()
 
             # This does nothing if batch_num_total is None or you are using a
             # scheduler which doesn't update per batch.
