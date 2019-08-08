@@ -27,11 +27,12 @@ from allennlp.training.tensorboard_writer import TensorboardWriter
 from allennlp.training.trainer_base import TrainerBase
 from allennlp.training import util as training_util
 from allennlp.training.moving_average import MovingAverage
+from allennlp.training import Trainer 
 from copy import deepcopy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@TrainerBase.register("default")
+@TrainerBase.register("MetaTrainer")
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,

@@ -6,13 +6,10 @@ import os
 import re
 import time
 from typing import Dict
-
 import torch
 import pytest
 from allennlp.common.checks import ConfigurationError
-
 from allennlp.common.testing import AllenNlpTestCase, ModelTestCase
-
 from allennlp.training import MetaTrainer
 from allennlp.training.trainer_base import TrainerBase
 from allennlp.training.learning_rate_schedulers import LearningRateScheduler
