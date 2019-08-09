@@ -28,9 +28,15 @@ from allennlp.training.moving_average import ExponentialMovingAverage
 class TestTrainer(AllenNlpTestCase):
     def setUp(self):
         super().setUp()
+        # TODO make this a set of dataset readers
         self.instances = SequenceTaggingDatasetReader().read(self.FIXTURES_ROOT / 'data' / 'sequence_tagging.tsv')
-        vocab = Vocabulary.from_instances(self.instances)
-        self.vocab = vocab
+        # loop through dataset readers and extend vocab
+        
+        instance_list = []
+        combined_vocab = Vocabulary.from_instances(self.instances)
+        for instances in instance_list:
+            combined_vocab.extend_from_instances(instances)
+        self.vocab = combined_vocab
         self.model_params = Params({
                 "text_field_embedder": {
                         "token_embedders": {
@@ -50,14 +56,14 @@ class TestTrainer(AllenNlpTestCase):
         self.model = SimpleTagger.from_params(vocab=self.vocab, params=self.model_params)
         self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, momentum=0.9)
         self.iterator = BasicIterator(batch_size=2)
-        self.iterator.index_with(vocab)
+        self.iterator.index_with(combined_vocab)
 
     def test_trainer_can_run(self):
-        trainer = Trainer(model=self.model,
+        trainer = MetaTrainer(model=self.model,
                           optimizer=self.optimizer,
                           iterator=self.iterator,
-                          train_dataset=self.instances,
-                          validation_dataset=self.instances,
+                          train_datasets=self.instances,
+                          validation_datasets=self.instances,
                           num_epochs=2)
         metrics = trainer.train()
         assert 'best_validation_loss' in metrics
@@ -133,7 +139,7 @@ class TestTrainer(AllenNlpTestCase):
 
         multigpu_iterator = BasicIterator(batch_size=4)
         multigpu_iterator.index_with(self.vocab)
-        trainer = Trainer(MetaDataCheckWrapper(self.model), self.optimizer,
+        trainer = MetaTrainer(MetaDataCheckWrapper(self.model), self.optimizer,
                           multigpu_iterator, self.instances, num_epochs=2,
                           cuda_device=[0, 1])
         metrics = trainer.train()
