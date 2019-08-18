@@ -27,7 +27,7 @@ from allennlp.training.tensorboard_writer import TensorboardWriter
 from allennlp.training.trainer_base import TrainerBase
 from allennlp.training import util as training_util
 from allennlp.training.moving_average import MovingAverage
-from allennlp.training import Trainer 
+from allennlp.training import Trainer
 from copy import deepcopy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -61,10 +61,10 @@ class MetaTrainer(Trainer):
                  should_log_learning_rate: bool = False,
                  log_batch_size_period: Optional[int] = None,
                  moving_average: Optional[MovingAverage] = None,
-                 # meta learner params 
+                 # meta learner parameters
                  meta_batches: int = 200,
                  inner_steps: int = 3,
-                 tasks_per_batch: int = 2 ) -> None:
+                 tasks_per_batch: int = 2) -> None:
                 
         """
         A trainer for doing supervised learning. It just takes a labeled dataset
@@ -176,6 +176,7 @@ class MetaTrainer(Trainer):
             parameters. Be careful that when saving the checkpoint, we will save the moving averages of
             parameters. This is necessary because we want the saved model to perform as well as the validated
             model if we load it later. But this may cause problems if you restart the training from checkpoint.
+
         """
 
         # I am not calling move_to_gpu here, because if the model is
@@ -187,7 +188,7 @@ class MetaTrainer(Trainer):
         self.shuffle = shuffle
         self.optimizer = optimizer
         self.train_data = train_datasets
-        self._validation_data = validation_dataset
+        self._validation_data = validation_datasets
         # Meta Trainer specific params 
         self.meta_batches = meta_batches
         self.tasks_per_batch = tasks_per_batch
@@ -195,7 +196,7 @@ class MetaTrainer(Trainer):
         self.step_size = .01
 
         if patience is None:  # no early stopping
-            if validation_dataset:
+            if validation_datasets:
                 logger.warning('You provided a validation dataset but patience was set to None, '
                                'meaning that early stopping is disabled')
         elif (not isinstance(patience, int)) or patience <= 0:
@@ -257,7 +258,7 @@ class MetaTrainer(Trainer):
     def rescale_gradients(self) -> Optional[float]:
         return training_util.rescale_gradients(self.model, self._grad_norm)
 
-    # TODO check out overriding 
+    # TODO check out overriding
     def batch_loss(self, batch_group: List[TensorDict], for_training: bool) -> torch.Tensor:
         """
         Does a forward pass on the given batches and returns the ``loss`` value in the result.
@@ -298,7 +299,7 @@ class MetaTrainer(Trainer):
             loss.backward()
             total_loss += loss.item()
             self.optimizer.step()
-            # This only place where vary from implementation 
+            # This only place where vary from implementation
             ##for param in model.parameters():
                 #TODO add innerstepsize
                     ##param.data -= innerstepsize * param.grad.data
@@ -308,7 +309,6 @@ class MetaTrainer(Trainer):
         self.model.load_state_dict({name : weights_before[name] + (weights_after[name] - weights_before[name]) * outerstepsize
         for name in weights_before})
         return total_loss
-        
 
     def _train_epoch(self, epoch: int) -> Dict[str, float]:
         """

@@ -29,14 +29,16 @@ class TestTrainer(AllenNlpTestCase):
     def setUp(self):
         super().setUp()
         # TODO make this a set of dataset readers
+        # Classification may be easier in this case. Same dataset reader but with different paths 
         self.instances = SequenceTaggingDatasetReader().read(self.FIXTURES_ROOT / 'data' / 'sequence_tagging.tsv')
         # loop through dataset readers and extend vocab
-        
         instance_list = []
         combined_vocab = Vocabulary.from_instances(self.instances)
         for instances in instance_list:
             combined_vocab.extend_from_instances(instances)
+        self.instances = instance_list
         self.vocab = combined_vocab
+        # Figure out params TODO 
         self.model_params = Params({
                 "text_field_embedder": {
                         "token_embedders": {
@@ -76,13 +78,14 @@ class TestTrainer(AllenNlpTestCase):
         assert isinstance(metrics['best_epoch'], int)
 
         # Making sure that both increasing and decreasing validation metrics work.
-        trainer = Trainer(model=self.model,
+        trainer = MetaTrainer(model=self.model,
                           optimizer=self.optimizer,
                           iterator=self.iterator,
-                          train_dataset=self.instances,
-                          validation_dataset=self.instances,
+                          train_datasets=self.instances,
+                          validation_datasets=self.instances,
                           validation_metric='+loss',
-                          num_epochs=2)
+                          num_epochs=2, 
+                          meta_batches=3)
         metrics = trainer.train()
         assert 'best_validation_loss' in metrics
         assert isinstance(metrics['best_validation_loss'], float)
@@ -98,7 +101,7 @@ class TestTrainer(AllenNlpTestCase):
 
     def test_trainer_can_run_exponential_moving_average(self):
         moving_average = ExponentialMovingAverage(self.model.named_parameters(), decay=0.9999)
-        trainer = Trainer(model=self.model,
+        trainer = MetaTrainer(model=self.model,
                           optimizer=self.optimizer,
                           iterator=self.iterator,
                           train_dataset=self.instances,
