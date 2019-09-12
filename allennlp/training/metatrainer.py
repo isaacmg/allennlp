@@ -69,6 +69,7 @@ class MetaTrainer(Trainer):
         self.tasks_per_batch = tasks_per_batch
         self.inner_steps = inner_steps
         self.step_size = .01
+        self.batch_norm = batch_norm
 
 
 
@@ -174,8 +175,8 @@ class MetaTrainer(Trainer):
             # TODO figure out if is important 
             train_loss += loss_batch
             # TODO figure out BATCH NORM MAML https://openreview.net/pdf?id=HygBZnRctX
-            #if self.batch_norm:
-                #batch_grad_norm = self.rescale_gradients()
+            if self.batch_norm:
+                batch_grad_norm = self.rescale_gradients()
             # This does nothing if batch_num_total is None or you are using a
             # scheduler which doesn't update per batch.
             # TODO investigate learning rate scheduling for meta learning 
