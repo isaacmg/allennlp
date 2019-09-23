@@ -85,6 +85,9 @@ class MetaTrainer(Trainer):
         if self._multiple_gpu:
             output_dict = training_util.data_parallel(batch_group, self.model, self._cuda_devices)
         else:
+            print("The length is ")
+            print(len(batch_group))
+            print(batch_group)
             assert len(batch_group) == 1
             batch = batch_group[0]
             batch = nn_util.move_to_device(batch, self._cuda_devices[0])
@@ -102,7 +105,21 @@ class MetaTrainer(Trainer):
 
         return loss
 
-    def reptile_inner_update(self, train_generators: List[Iterable], iteration: int):
+    def reptile_inner_update(self, batch_data: List[TensorDict])->float:
+        loss = self.batch_loss(batch_data, True)
+        if torch.isnan(loss):
+            raise ValueError("nan loss encountered")
+        loss.backward()
+        temp_loss = loss.item()
+        self.optimizer.step()
+        # This only place where vary from implementation
+        ##for param in model.parameters():
+            #TODO add innerstepsize
+                ##param.data -= innerstepsize * param.grad.data
+        return temp_loss
+
+
+    def reptile_outer_update(self, train_generators: List[Iterable], iteration: int):
         # https://github.com/farbodtm/reptile-pytorch/blob/master/reptile.py
         weights_before = deepcopy(self.model.state_dict())
         self.optimizer.zero_grad()
@@ -111,16 +128,7 @@ class MetaTrainer(Trainer):
         task_wrap = Tqdm.tqdm(task, total=self.inner_steps)
         total_loss = 0.0
         for batch_data in task_wrap:
-            loss = self.batch_loss(batch_data, True)
-            if torch.isnan(loss):
-                raise ValueError("nan loss encountered")
-            loss.backward()
-            total_loss += loss.item()
-            self.optimizer.step()
-            # This only place where vary from implementation
-            ##for param in model.parameters():
-                #TODO add innerstepsize
-                    ##param.data -= innerstepsize * param.grad.data
+            total_loss += self.reptile_inner_update(batch_data)
         weights_after = self.model.state_dict()
         #They used self.step_size of 1.0 in some of their outer.
         outerstepsize = self.step_size * (1 - iteration / self.meta_batches) # linear schedule
@@ -170,7 +178,7 @@ class MetaTrainer(Trainer):
         
         cumulative_batch_size = 0
         for i in range(0, self.meta_batches):
-            loss_batch = self.reptile_inner_update(train_generators, i)
+            loss_batch = self.reptile_outer_update(train_generators, i)
 
             # TODO figure out if is important 
             train_loss += loss_batch
@@ -249,8 +257,6 @@ class MetaTrainer(Trainer):
         """
         logger.info("Validating")
 
-        self.model.eval()
-
         # Replace parameter values with the shadow values from the moving averages.
         if self._moving_average is not None:
             self._moving_average.assign_average_value()
@@ -269,24 +275,28 @@ class MetaTrainer(Trainer):
         num_validation_batches = math.ceil(val_iterator.get_num_batches(self._validation_data)/num_gpus)
         val_generator_tqdm = Tqdm.tqdm(val_generator,
                                        total=num_validation_batches)
+        print("val gene called")
+        few_shot = val_generator.__next__()
+        self.reptile_inner_update(few_shot)
+        self.model.eval()
         batches_this_epoch = 0
         val_loss = 0
-        for batch_group in val_generator_tqdm:
+        with torch.no_grad():
+            for batch_group in val_generator_tqdm:
+                loss = self.batch_loss(batch_group, for_training=False)
+                if loss is not None:
+                    # You shouldn't necessarily have to compute a loss for validation, so we allow for
+                    # `loss` to be None.  We need to be careful, though - `batches_this_epoch` is
+                    # currently only used as the divisor for the loss function, so we can safely only
+                    # count those batches for which we actually have a loss.  If this variable ever
+                    # gets used for something else, we might need to change things around a bit.
+                    batches_this_epoch += 1
+                    val_loss += loss.detach().cpu().numpy()
 
-            loss = self.batch_loss(batch_group, for_training=False)
-            if loss is not None:
-                # You shouldn't necessarily have to compute a loss for validation, so we allow for
-                # `loss` to be None.  We need to be careful, though - `batches_this_epoch` is
-                # currently only used as the divisor for the loss function, so we can safely only
-                # count those batches for which we actually have a loss.  If this variable ever
-                # gets used for something else, we might need to change things around a bit.
-                batches_this_epoch += 1
-                val_loss += loss.detach().cpu().numpy()
-
-            # Update the description with the latest metrics
-            val_metrics = training_util.get_metrics(self.model, val_loss, batches_this_epoch)
-            description = training_util.description_from_metrics(val_metrics)
-            val_generator_tqdm.set_description(description, refresh=False)
+                # Update the description with the latest metrics
+                val_metrics = training_util.get_metrics(self.model, val_loss, batches_this_epoch)
+                description = training_util.description_from_metrics(val_metrics)
+                val_generator_tqdm.set_description(description, refresh=False)
 
         # Now restore the original parameter values.
         if self._moving_average is not None:
@@ -334,18 +344,18 @@ class MetaTrainer(Trainer):
                     metrics["peak_"+key] = max(metrics.get("peak_"+key, 0), value)
 
             if self._validation_data is not None:
-                with torch.no_grad():
-                    # We have a validation set, so compute all the metrics on it.
-                    val_loss, num_batches = self._validation_loss()
-                    val_metrics = training_util.get_metrics(self.model, val_loss, num_batches, reset=True)
+            
+                # We have a validation set, so compute all the metrics on it.
+                val_loss, num_batches = self._validation_loss()
+                val_metrics = training_util.get_metrics(self.model, val_loss, num_batches, reset=True)
 
-                    # Check validation metric for early stopping
-                    this_epoch_val_metric = val_metrics[self._validation_metric]
-                    self._metric_tracker.add_metric(this_epoch_val_metric)
+                # Check validation metric for early stopping
+                this_epoch_val_metric = val_metrics[self._validation_metric]
+                self._metric_tracker.add_metric(this_epoch_val_metric)
 
-                    if self._metric_tracker.should_stop_early():
-                        logger.info("Ran out of patience.  Stopping training.")
-                        break
+                if self._metric_tracker.should_stop_early():
+                    logger.info("Ran out of patience.  Stopping training.")
+                    break
 
             self._tensorboard.log_metrics(train_metrics,
                                           val_metrics=val_metrics,
