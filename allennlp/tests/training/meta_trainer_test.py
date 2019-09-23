@@ -67,7 +67,7 @@ class TestTrainer(AllenNlpTestCase):
                           optimizer=self.optimizer,
                           iterator=self.iterator,
                           train_datasets=self.instances_list,
-                          validation_datasets=self.instances_list,
+                          validation_datasets=self.instances_list[0],
                           num_epochs=2)
         metrics = trainer.train()
         assert 'best_validation_loss' in metrics
