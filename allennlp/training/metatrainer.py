@@ -276,11 +276,16 @@ class MetaTrainer(Trainer):
         val_generator_tqdm = Tqdm.tqdm(val_generator,
                                        total=num_validation_batches)
         print("val gene called")
-        few_shot = val_generator.__next__()
-        self.reptile_inner_update(few_shot)
-        self.model.eval()
         batches_this_epoch = 0
         val_loss = 0
+        try:
+            few_shot = val_generator.__next__()
+        except:
+            print("Error could not do few shot validation")
+            return batches_this_epoch, val_loss
+        self.reptile_inner_update(few_shot)
+        self.model.eval()
+
         with torch.no_grad():
             for batch_group in val_generator_tqdm:
                 loss = self.batch_loss(batch_group, for_training=False)
