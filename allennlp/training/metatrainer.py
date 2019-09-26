@@ -520,7 +520,7 @@ class MetaTrainer(Trainer):
                     model: Model,
                     serialization_dir: str,
                     iterator: DataIterator,
-                    train_data: Iterable[Instance],
+                    train_data: List[Iterable[Instance]],
                     validation_data: Optional[Iterable[Instance]],
                     params: Params,
                     validation_iterator: DataIterator = None) -> 'Trainer':

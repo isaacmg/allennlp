@@ -9,7 +9,7 @@
       "database_file": "/atis/atis.db",
       "keep_if_unparseable": true
   },
-  "train_data_path": "/atis/train.json",
+  "train_data_path": ["/atis/train.json", "/"],
   "validation_data_path": "/atis/dev.json",
   "model": {
     "type": "atis_parser",
