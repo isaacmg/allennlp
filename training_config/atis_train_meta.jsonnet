@@ -9,7 +9,7 @@
       "database_file": "/atis/atis.db",
       "keep_if_unparseable": true
   },
-  "train_data_path": ["/atis/train.json", "/"],
+  "train_data_path": ["/atis/train.json", "/atis/snips.json", "/atis/more_data.json"],
   "validation_data_path": "/atis/dev.json",
   "model": {
     "type": "atis_parser",
@@ -42,10 +42,10 @@
     "batch_size" : 32
   },
   "trainer": {
-    type": "metatrainer"
+    "type": "metatrainer",
     "num_epochs": 30,
     "patience": 10,
-    "cuda_device": 0,
+    "cuda_device": -1,
     "validation_metric": "+denotation_acc",
     "optimizer": {
       "type": "adam",
@@ -53,4 +53,5 @@
     }
   }
 }
+
 
