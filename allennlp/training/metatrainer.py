@@ -32,7 +32,7 @@ from copy import deepcopy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@TrainerBase.register("MetaTrainer")
+@Trainer.register('metatrainer')
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,
