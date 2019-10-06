@@ -1,15 +1,15 @@
-# pylint: disable=protected-access
 import math
 
 from typing import List
 import numpy
+import torch
 
 from allennlp.common.util import JsonDict, sanitize
 from allennlp.interpret.saliency_interpreters.saliency_interpreter import SaliencyInterpreter
 from allennlp.nn import util
 
 
-@SaliencyInterpreter.register('simple-gradient')
+@SaliencyInterpreter.register("simple-gradient")
 class SimpleGradient(SaliencyInterpreter):
     def saliency_interpret_from_json(self, inputs: JsonDict) -> JsonDict:
         """
@@ -42,7 +42,7 @@ class SimpleGradient(SaliencyInterpreter):
                 normalized_grad = [math.fabs(e) / norm for e in emb_grad]
                 grads[key] = normalized_grad
 
-            instances_with_grads['instance_' + str(idx + 1)] = grads
+            instances_with_grads["instance_" + str(idx + 1)] = grads
         return sanitize(instances_with_grads)
 
     def _register_forward_hook(self, embeddings_list: List):
@@ -52,10 +52,21 @@ class SimpleGradient(SaliencyInterpreter):
         our normalization scheme multiplies the gradient by the embedding value.
         """
 
-        def forward_hook(module, inputs, output):  # pylint: disable=unused-argument
+        def forward_hook(module, inputs, output):
             embeddings_list.append(output.squeeze(0).clone().detach().numpy())
 
         embedding_layer = util.find_embedding_layer(self.predictor._model)
         handle = embedding_layer.register_forward_hook(forward_hook)
 
         return handle
+
+    def saliency_interpret_from_instances(self, labeled_instances) -> JsonDict:
+        grads, outputs = self.predictor.get_gradients(labeled_instances)
+        # we only handle when we have 1 input at the moment, so this loop does nothing
+        for key, grad in grads.items():
+            grads_summed_across_batch = torch.sum(grad, axis=0)
+            summed_across_embedding_dim = torch.sum(grads_summed_across_batch, axis=1)
+            joe_bob_position = 0 # TODO, hardcoded position
+            final_loss = summed_across_embedding_dim[joe_bob_position]
+            final_loss.requires_grad_()
+            return final_loss
