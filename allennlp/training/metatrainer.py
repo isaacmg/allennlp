@@ -29,10 +29,13 @@ from allennlp.training import util as training_util
 from allennlp.training.moving_average import MovingAverage
 from allennlp.training import Trainer
 from copy import deepcopy
+from allennlp.training.meta_pieces import MetaTrainerPieces
+from allennlp.training.trainer_pieces import TrainerPieces
+from allennlp.training.meta_utils import meta_dataset_from_params
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@Trainer.register('metatrainer')
+@TrainerBase.register('metatrainer')
 class MetaTrainer(Trainer):
     def __init__(self,
                  model: Model,
@@ -517,13 +520,17 @@ class MetaTrainer(Trainer):
     # Requires custom from_params.
     @classmethod
     def from_params(cls,  # type: ignore
-                    model: Model,
-                    serialization_dir: str,
-                    iterator: DataIterator,
-                    train_data: List[Iterable[Instance]],
-                    validation_data: Optional[Iterable[Instance]],
                     params: Params,
-                    validation_iterator: DataIterator = None) -> 'Trainer':
+                    serialization_dir: str,
+                    recover: bool = False,
+                    cache_directory: str = None,
+                    cache_prefix: str = None) -> 'Trainer':
+        meta_dataset_from_params(params, cache_directory=cache_directory, cache_prefix=cache_prefix)
+        model = Model.from_params(vocab=vocab, params=params.pop("model"))
+        iterator = pieces.iterator
+        train_data = pieces.train_dataset
+        validation_data = pieces.validation_dataset
+        validation_iterator = pieces.validation_iterator
         # pylint: disable=arguments-differ
         patience = params.pop_int("patience", None)
         validation_metric = params.pop("validation_metric", "-loss")
