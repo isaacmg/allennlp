@@ -62,6 +62,12 @@ def meta_dataset_from_params(
     dataset_reader = DatasetReader.from_params(dataset_reader_params)
     train_data = []
     train_data_path = params.pop("train_data_path")
+    validation_and_test_dataset_reader: DatasetReader = dataset_reader
+    if validation_dataset_reader_params is not None:
+        logger.info("Using a separate dataset reader to load validation and test data.")
+        validation_and_test_dataset_reader = DatasetReader.from_params(
+            validation_dataset_reader_params
+        ) 
     for dataset in train_data_path:
 
         if train_cache_dir:
@@ -70,12 +76,7 @@ def meta_dataset_from_params(
         logger.info("Reading training data from %s", train_data_path)
         train_data.append(dataset_reader.read(dataset))
 
-    validation_and_test_dataset_reader: DatasetReader = dataset_reader
-    if validation_dataset_reader_params is not None:
-        logger.info("Using a separate dataset reader to load validation and test data.")
-        validation_and_test_dataset_reader = DatasetReader.from_params(
-            validation_dataset_reader_params
-        )   
+      
     datasets: Dict[str, Iterable[Instance]] = {"train": train_data}
 
     validation_data_path = params.pop("validation_data_path", None)
