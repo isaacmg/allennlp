@@ -6,7 +6,7 @@ import logging
 import pathlib
 import os
 import shutil
-
+from allennlp.data.vocabulary import Vocabulary
 import torch
 from torch.nn.parallel import replicate, parallel_apply
 from torch.nn.parallel.scatter_gather import gather
@@ -59,12 +59,14 @@ def meta_dataset_from_params(
     train_cache_dir, validation_cache_dir = _set_up_cache_files(
         dataset_reader_params, validation_dataset_reader_params, cache_directory, cache_prefix
     )
+    dataset_reader = DatasetReader.from_params(dataset_reader_params)
     train_data = []
     train_data_path = params.pop("train_data_path")
     for dataset in train_data_path:
-        dataset_reader = DatasetReader.from_params(dataset_reader_params)
+
         if train_cache_dir:
             dataset_reader.cache_data(train_cache_dir)
+            validation_and_test_dataset_reader.cache_data(validation_cache_dir)
         logger.info("Reading training data from %s", train_data_path)
         train_data.append(dataset_reader.read(dataset))
 
@@ -73,9 +75,7 @@ def meta_dataset_from_params(
         logger.info("Using a separate dataset reader to load validation and test data.")
         validation_and_test_dataset_reader = DatasetReader.from_params(
             validation_dataset_reader_params
-        )
-        validation_and_test_dataset_reader.cache_data(validation_cache_dir)
-        
+        )   
     datasets: Dict[str, Iterable[Instance]] = {"train": train_data}
 
     validation_data_path = params.pop("validation_data_path", None)
@@ -90,3 +90,22 @@ def meta_dataset_from_params(
         test_data = validation_and_test_dataset_reader.read(test_data_path)
         datasets["test"] = test_data
     return datasets
+
+    def make_vocab(serialization_dir :str, recover :bool, all_datasets):
+        if recover and os.path.exists(os.path.join(serialization_dir, "vocabulary")):
+            vocab = Vocabulary.from_files(os.path.join(serialization_dir, "vocabulary"))
+            params.pop("vocabulary", {})
+        else:
+            vocab = Vocabulary.from_params(
+                params.pop("vocabulary", {}),
+                # Using a generator comprehension here is important
+                # because, being lazy, it allows us to not iterate over the
+                # dataset when directory_path is specified.
+                (
+                    instance
+                    for key, dataset in all_datasets.items()
+                    if key in datasets_for_vocab_creation
+                    for instance in dataset
+                ),
+            )
+        return vocab

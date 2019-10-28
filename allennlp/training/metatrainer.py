@@ -516,7 +516,6 @@ class MetaTrainer(Trainer):
             self._batch_num_total = batch_num_total
 
         return epoch_to_return
-
     # Requires custom from_params.
     @classmethod
     def from_params(cls,  # type: ignore
@@ -525,9 +524,10 @@ class MetaTrainer(Trainer):
                     recover: bool = False,
                     cache_directory: str = None,
                     cache_prefix: str = None) -> 'Trainer':
-        meta_dataset_from_params(params, cache_directory=cache_directory, cache_prefix=cache_prefix)
+        datasets = meta_dataset_from_params(params, cache_directory=cache_directory, cache_prefix=cache_prefix)
         model = Model.from_params(vocab=vocab, params=params.pop("model"))
-        iterator = pieces.iterator
+        iterator = DataIterator.from_params(params.pop("iterator"))
+        iterator.index_with(model.vocab)
         train_data = pieces.train_dataset
         validation_data = pieces.validation_dataset
         validation_iterator = pieces.validation_iterator
