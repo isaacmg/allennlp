@@ -51,10 +51,10 @@ class MetaTrainer(Trainer):
                  **kwargs) -> None:
                 
         """
-        A trainer for doing supervised learning. It just takes a labeled dataset
-        and a ``DataIterator``, and uses the supplied ``Optimizer`` to learn the weights
+        A metatrainer for doing meta-learning. It just takes a list of labeled datasets
+        and a ``DataIterator``, and uses the supplied meta-learner to learn the weights
         for your model over some fixed number of epochs. You can also pass in a validation
-        dataset and enable early stopping. There are many other bells and whistles as well.
+        datasets and enable early stopping. There are many other bells and whistles as well.
 
         Parameters
         ----------
